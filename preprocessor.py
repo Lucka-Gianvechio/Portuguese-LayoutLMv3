@@ -1,7 +1,7 @@
 import pytesseract
 from pytesseract import Output
 from pathlib import Path
-from numpy.random import default_rng
+import numpy.random as rnd
 import torch
 
 from copy import deepcopy
@@ -15,7 +15,7 @@ class PreProcessor:
 
     def __init__(self, model_processor : BertimbauLayoutLMv3Processor):
         self.model_processor = model_processor
-        self.rng = default_rng()
+        self.rng : rnd.Generator = rnd.default_rng()
         self.MASK_TOKEN_ID = self.model_processor.tokenizer.mask_token_id
         self.special_tokens = self.model_processor.SPECIAL2BBOX.keys()
         self.possible_subs = [k for k in range(0, self.model_processor.tokenizer.vocab_size) if k not in self.special_tokens]
@@ -64,6 +64,23 @@ class PreProcessor:
                         )
 
         return processed_data
+
+    def _get_mask_index(self):
+        w, h = 14, 14
+        masking_ratio = 0.4*w*h
+        M = set()
+        while len(M) < masking_ratio:
+            diff = max(masking_ratio - len(M), 1)
+            s = max(16, self.rng.integers(0, diff))
+
+            r = self.rng.uniform(0.3, 1/0.3)
+            a, b = (s*r)**.5, (s/r)**.5
+            t = self.rng.integers(0, max(int(h - a), 1)).astype(int)
+            l = self.rng.integers(0, max(int(w - b), 1)).astype(int)
+            a, b = int(a), int(b)
+            M = M.union({(i, j) for i in range(t, t+a) for j in range(l, l+b)})
+
+        return M
 
     def mask_image(self, image):
         pass
@@ -189,8 +206,17 @@ if __name__ == '__main__':
             print(e)
             #print(traceback.format_exc(e))
 
-    print("\n\n")
+    #print("\n\n")
     #print(masks)
-    print(processor.model_processor.tokenizer.decode(processed_data["input_ids"][0]))
-    print("\n\n")
-    print(processor.model_processor.tokenizer.decode(masks[0]))
+    #print(processor.model_processor.tokenizer.decode(processed_data["input_ids"][0]))
+    #print("\n\n")
+    #print(processor.model_processor.tokenizer.decode(masks[0]))
+    mask = processor._get_mask_index()
+    for i in range(0, 14):
+        for j in range(0, 14):
+            if (i, j) in mask:
+                print(".", end="")
+            else:
+                print("%", end="")
+            print("  ", end = "")
+        print()
