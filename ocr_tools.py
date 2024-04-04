@@ -6,18 +6,18 @@ from pathlib import Path
 
 
 def read_image(image_path: str or Path):
-   
+
     if not isinstance(image_path, str):
         image_path_string = str(image_path)
-    
+
     cv2_image = cv2.imread(image_path_string)
-    
+
     return cv2_image
 
-def resize_image(cv2_image):
-    
+def resize_image(cv2_image, scale_factor = 2):
+
     height, width, channel = cv2_image.shape
-    resized = cv2.resize(cv2_image, (width//2, height//2))
+    resized = cv2.resize(cv2_image, (width//scale_factor, height//scale_factor))
 
     return resized, (height, width)
 
@@ -31,8 +31,8 @@ def preprocess_image(cv2_image):
 
     return thresh_img
 
-def get_text_bbox(ocr_details):
-    
+def get_text_bbox(ocr_details, scale_factor = 2):
+
     n_boxes = len(ocr_details['level'])
 
     text_bbox = []
@@ -54,10 +54,10 @@ def get_text_bbox(ocr_details):
         text_bbox.append(
             {
                 "text": text,
-                "bbox": bbox
+                "bbox": [scale_factor*cord for cord in bbox]
             }
         )
-    
+
     return text_bbox
 
 
@@ -98,4 +98,12 @@ def normalize_bbox(bbox, width, height):
         int(1000 * (bbox[1] / height)),
         int(1000 * (bbox[2] / width)),
         int(1000 * (bbox[3] / height)),
-    ] 
+    ]
+
+def draw_bounding_boxes(image, bounding_boxes):
+    for box in bounding_boxes:
+        top_left = (box[0], box[1])
+        bottom_right = (box[2], box[3])
+        cv2.rectangle(image, top_left, bottom_right, (0, 255, 0), 2)
+
+    return image
