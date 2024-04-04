@@ -232,3 +232,96 @@ class BertimbauLayoutLMv3Processor:
             processed[k] = torch.tensor(v, dtype = torch.int32)
 
         return processed
+
+
+if __name__ == '__main__':
+    from transformers import BertTokenizer, LayoutLMv3Processor
+    from tqdm import tqdm
+    from pathlib import Path
+    import ocr_tools
+    import cv2
+    import pytesseract
+    from pytesseract import Output
+
+    def get_image_ocr( path_to_image : Path):
+
+        cv2_image = ocr_tools.read_image(
+            image_path = path_to_image
+        )
+        #cv2.imshow("original", cv2_image)
+        resized_image, shape = ocr_tools.resize_image(
+            cv2_image = cv2_image
+        )
+        #cv2.imshow("resized_image", resized_image)
+        preprocessed_image = ocr_tools.preprocess_image(
+            cv2_image = resized_image
+        )
+        #cv2.imshow("preprocessed_image", preprocessed_image)
+        # configuring parameters for tesseract
+        custom_config = r'--oem 3 --psm 6'
+
+        # Get all OCR output information from pytesseract
+        ocr_output_details = pytesseract.image_to_data(
+            preprocessed_image,
+            output_type = Output.DICT,
+            config=custom_config,
+            lang='eng'
+        )
+
+        text_bbox = ocr_tools.get_text_bbox(
+            ocr_details = ocr_output_details
+        )
+
+        return text_bbox, shape, cv2_image
+
+
+    lmv3_processor = LayoutLMv3Processor.from_pretrained("microsoft/layoutlmv3-base")
+    lmv3_processor.feature_extractor.apply_ocr = False
+
+    model_processor = BertimbauLayoutLMv3Processor(
+        layoutlmv3_processor=lmv3_processor,
+        bertimbau_tokenizer=BertTokenizer.from_pretrained('neuralmind/bert-base-portuguese-cased', do_lower_case=False)
+    )
+
+    main_path = Path("/home/luckagianvechio/Documents/Material Estudo TCC/IIT CDIP/images.a.a/imagesa/a/a")
+    a_path = Path("a/")
+    path_to_image = main_path / a_path / "aaa0a000/92464841_4842.tif"
+
+    text_bbox, shape, cv2_image = get_image_ocr(path_to_image)
+
+    texts = [data["text"] for data in text_bbox]
+    bboxs = [data["bbox"] for data in text_bbox]
+
+    bboxs = [ocr_tools.normalize_bbox(bbox, shape[1], shape[0]) for bbox in bboxs]
+
+    processor_entrie = {
+            "text": texts,
+            "boxes": bboxs,
+            "max_length": 512,
+            "images": cv2_image,
+            "return_tensors": "pt",
+            "truncation": True,
+            "padding": "max_length"
+        }
+
+    procs = lmv3_processor(**processor_entrie)
+    new_procs = model_processor(cv2_image, texts, bboxs)
+
+    all_boxs = [[v.item() for v in bx] for bx in procs["bbox"][0]]
+    all_new_boxs = [[v.item() for v in bx] for bx in new_procs["bbox"][0]]
+
+    im1 = ocr_tools.draw_bounding_boxes(cv2.resize(cv2_image, (1000, 1000), interpolation = cv2.INTER_AREA), all_boxs)
+    im2 = ocr_tools.draw_bounding_boxes(cv2.resize(cv2_image, (1000, 1000), interpolation = cv2.INTER_AREA), all_new_boxs)
+
+    #for txt, bbox in zip(texts[-20:], sorted(bboxs, key = lambda x: x[1])[-20:]):
+    #    print(txt, (bbox[2] - bbox[0]) * (bbox[3] - bbox[1]), bbox, sep="\t")
+
+    cv2.imshow("original", im1)
+    cv2.imshow("mine", im2)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+    #print(used)
+    #print(len(used))
+    #breakpoint()

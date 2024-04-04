@@ -3,6 +3,7 @@ from pytesseract import Output
 from pathlib import Path
 import numpy.random as rnd
 import torch
+from numpy import linspace
 
 from copy import deepcopy
 from new_processor import BertimbauLayoutLMv3Processor
@@ -19,6 +20,47 @@ class PreProcessor:
         self.MASK_TOKEN_ID = self.model_processor.tokenizer.mask_token_id
         self.special_tokens = self.model_processor.SPECIAL2BBOX.keys()
         self.possible_subs = [k for k in range(0, self.model_processor.tokenizer.vocab_size) if k not in self.special_tokens]
+
+        self.num_patches = 16
+        self.x_marks = linspace(0, 1000, self.num_patches + 1)
+        self.y_marks = linspace(0, 1000, self.num_patches + 1)
+
+        self.patches = self._get_patches()
+
+    def _get_patches(
+        self
+    ) -> list[int]:
+
+        patches = []
+
+        for y_idx in range(len(self.y_marks[:-1])):
+            patch_line = []
+            for x_idx in range(len(self.x_marks[:-1])):
+                top_left_y = int(self.y_marks[y_idx])
+                top_left_x = int(self.x_marks[x_idx])
+                bottom_right_y = int(self.y_marks[y_idx+1])
+                bottom_right_x = int(self.x_marks[x_idx+1])
+                patch_line.append([top_left_x, top_left_y, bottom_right_x, bottom_right_y])
+            patches.append(patch_line)
+
+        return patches
+
+    def _get_bbox_patch(
+        self,
+        bbox: list[int]
+    ) -> list[int]:
+
+        for y_idx in range(len(self.y_marks[:-1])):
+            if  self.y_marks[y_idx] <= bbox[1] and bbox[1] <= self.y_marks[y_idx+1]:
+                break
+
+        for x_idx in range(len(self.x_marks[:-1])):
+            if  self.x_marks[x_idx] <= bbox[0] and bbox[0] <= self.x_marks[x_idx+1]:
+                break
+
+        box_patch = self.patches[y_idx][x_idx]
+
+        return box_patch
 
     def get_image_ocr(self, path_to_image : Path):
 
@@ -66,7 +108,7 @@ class PreProcessor:
         return processed_data
 
     def _get_mask_index(self):
-        w, h = 14, 14
+        w, h = 16, 16
         masking_ratio = 0.4*w*h
         M = set()
         while len(M) < masking_ratio:
@@ -212,11 +254,13 @@ if __name__ == '__main__':
     #print("\n\n")
     #print(processor.model_processor.tokenizer.decode(masks[0]))
     mask = processor._get_mask_index()
-    for i in range(0, 14):
-        for j in range(0, 14):
+    for i in range(0, 16):
+        for j in range(0, 16):
             if (i, j) in mask:
                 print(".", end="")
             else:
                 print("%", end="")
-            print("  ", end = "")
+            print(" ", end = "")
         print()
+
+    breakpoint()
