@@ -108,7 +108,7 @@ class PreProcessor:
         return processed_data
 
     def _get_mask_index(self):
-        w, h = 16, 16
+        w, h = 14, 14
         masking_ratio = 0.4*w*h
         M = set()
         while len(M) < masking_ratio:
@@ -152,22 +152,25 @@ class PreProcessor:
             while masked_cost < max_budget and ctr < 100:
                 ctr += 1
 
+                # Gets a word span length from a poisson capped at 10
                 span = min(self.rng.poisson(3), 9) + 1
                 word_start = self.rng.integers(0, len(guide_list))
 
+                # Cant initiate a span in a valid start where it gets over valid len
                 if span + word_start >= len(guide_list):
                     continue
 
                 word_span = list(range(word_start, word_start + span))
 
+                # Cant have word spans intersectin each other
                 if set(word_span).intersection({m[0] for m in masked_indexes}):
                     continue
 
-
-
+                # Choses the masking type to be applied (same for each span)
                 masking_type = self.rng.choice(["MASK", "SUB", "DONT"], p = [0.8, 0.1, 0.1])
                 masked_indexes += [(w_s, masking_type) for w_s in word_span]
 
+                # Cost comes from tokens in guide
                 masked_cost += sum(guide_list[word_span[0]: word_span[-1]])
 
             masked_indexes.sort()
@@ -178,10 +181,8 @@ class PreProcessor:
                 # Sums 1 to compensate for CLS start token
                 offset = sum(guide_list[:masked_index[0]]) + 1
                 mask_type = masked_index[1]
-                try:
-                    tokens_to_mask += [(offset + k, mask_type) for k in range(guide_list[masked_index[0]].item())]
-                except:
-                    breakpoint()
+                tokens_to_mask += [(offset + k, mask_type) for k in range(guide_list[masked_index[0]].item())]
+
 
             masked_tokens = deepcopy(toks_batch[batch])
 
@@ -199,11 +200,8 @@ class PreProcessor:
 
                 masked_tokens[idx] = token_to_append
 
-            #masked_tokens = [
-            #    self.MASK_TOKEN_ID if idx in tokens_to_mask else token_id for idx, token_id in enumerate(toks_batch[batch])
-            #]
 
-            if not self.model_processor.tokenizer.sep_token_id in masked_tokens:
+            if self.model_processor.tokenizer.sep_token_id not in masked_tokens:
                 raise Exception("No sep token detected in sequence!")
 
             masked_tokens_batch.append(masked_tokens)
